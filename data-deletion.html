@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excluir meus dados — Anúncios IA · Maestros da IA</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .doc { max-width: 640px; margin: 0 auto; padding: var(--space-2xl) var(--space-lg) var(--space-xl); }
+    .doc h1 { font-family: var(--display); font-weight:400; text-transform:uppercase; font-size: clamp(32px,6vw,50px); line-height:.92; letter-spacing:.01em; margin-bottom: var(--space-sm); }
+    .doc h2 { font-family: var(--display); font-weight:400; text-transform:uppercase; font-size:20px; letter-spacing:.02em; margin: var(--space-xl) 0 var(--space-sm); }
+    .doc p, .doc li { color: var(--ink-2); font-size:15px; line-height:1.65; }
+    .doc ul { margin: var(--space-sm) 0 var(--space-md) var(--space-lg); }
+    .doc strong { color: var(--ink); }
+    .back-link { color: var(--red); font-weight:700; text-decoration:none; font-size:14px; }
+    .del-card { background: var(--card); border:2px solid var(--ink); border-radius: var(--radius-md); padding: var(--space-lg); margin-top: var(--space-lg); box-shadow: 5px 5px 0 rgba(20,18,16,.09); }
+    .del-card label { display:block; font-family: var(--mono); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color: var(--ink-2); margin: var(--space-md) 0 6px; }
+    .del-card input, .del-card textarea { width:100%; padding:12px 14px; background: var(--paper); border:2px solid var(--ink); border-radius: var(--radius-sm); color: var(--ink); font-size:15px; font-family:inherit; outline:none; }
+    .del-card input:focus, .del-card textarea:focus { border-color: var(--red); box-shadow:2px 2px 0 var(--red); }
+    .del-status { margin-top: var(--space-md); font-size:14px; font-weight:600; display:none; }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+  <div class="doc">
+    <a href="index.html" class="back-link">← Voltar para a ferramenta</a>
+    <h1 style="margin-top:16px">Excluir meus dados</h1>
+    <p>Você tem total controle sobre seus dados (LGPD). Há duas formas de removê-los:</p>
+
+    <h2>1. Dados no seu navegador (imediato)</h2>
+    <p>Sua chave de IA, preferências e a última campanha ficam <strong>apenas no seu navegador</strong>. Para apagá-los agora:</p>
+    <ul>
+      <li>Na ferramenta, abra <strong>Chaves</strong> e clique em <strong>"Limpar todas as chaves"</strong>; ou</li>
+      <li>Limpe os dados do site nas configurações do navegador.</li>
+    </ul>
+    <button id="clear-local" class="btn-secondary" style="max-width:280px">Limpar dados deste navegador</button>
+
+    <h2>2. Dados de verificação e feedback</h2>
+    <p>Se quiser que a gente remova registros associados ao seu e-mail/WhatsApp (verificação de acesso e feedbacks enviados), preencha abaixo. Processamos a solicitação e confirmamos a exclusão.</p>
+
+    <div class="del-card">
+      <label for="del-email">Seu e-mail cadastrado</label>
+      <input type="email" id="del-email" placeholder="seu@email.com" autocomplete="email">
+      <label for="del-phone">Seu WhatsApp (opcional)</label>
+      <input type="tel" id="del-phone" placeholder="11999999999" autocomplete="tel">
+      <label for="del-reason">Motivo (opcional)</label>
+      <textarea id="del-reason" rows="3" placeholder="Se quiser, conte o motivo."></textarea>
+      <button id="del-submit" class="btn-primary" style="margin-top:16px">Solicitar exclusão</button>
+      <p id="del-status" class="del-status"></p>
+    </div>
+
+    <p style="margin-top:var(--space-xl)"><a href="index.html" class="back-link">← Voltar para a ferramenta</a></p>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    document.getElementById('clear-local').addEventListener('click', function () {
+      try {
+        Object.keys(localStorage).forEach(function (k) {
+          if (k.indexOf('anuncios') === 0 || k.indexOf('maestria') === 0) localStorage.removeItem(k);
+        });
+        this.textContent = 'Dados locais apagados ✓';
+      } catch (e) { this.textContent = 'Não foi possível apagar automaticamente'; }
+    });
+
+    document.getElementById('del-submit').addEventListener('click', async function () {
+      var email = document.getElementById('del-email').value.trim();
+      var phone = document.getElementById('del-phone').value.trim();
+      var reason = document.getElementById('del-reason').value.trim();
+      var statusEl = document.getElementById('del-status');
+      statusEl.style.display = 'block';
+      if (!email && !phone) { statusEl.style.color = '#c1240f'; statusEl.textContent = 'Informe seu e-mail ou WhatsApp.'; return; }
+      this.disabled = true; this.textContent = 'Enviando...';
+      try {
+        var base = (window.APP_CONFIG && window.APP_CONFIG.n8nWebhookBase) || '';
+        var resp = await fetch(base + '/request-deletion', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_slug: 'anuncios-ia', email: email, phone: phone, reason: reason })
+        });
+        var r = {}; try { r = await resp.json(); } catch (e) {}
+        if (resp.ok) { statusEl.style.color = '#1f7a3f'; statusEl.textContent = (r && r.message) || 'Solicitação recebida. Você receberá a confirmação em breve.'; }
+        else { statusEl.style.color = '#c1240f'; statusEl.textContent = (r && r.error) || 'Erro ao enviar. Tente novamente.'; }
+      } catch (e) { statusEl.style.color = '#c1240f'; statusEl.textContent = 'Erro ao enviar. Tente novamente.'; }
+      finally { this.disabled = false; this.textContent = 'Solicitar exclusão'; }
+    });
+  </script>
+</body>
+</html>
