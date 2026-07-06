@@ -47,8 +47,12 @@ const ApiKeyManager = (function() {
   };
 
   // Which services this specific tool uses — set during scaffold
-  // Modify this array to include only the services needed
-  const ENABLED_SERVICES = ['openrouter', 'openai'];
+  // Modify this array to include only the services needed.
+  // Order = priority in getActiveKey() AND display order on the key screen.
+  // OpenRouter first (one key reaches every model); Google/Gemini second because
+  // Google AI Studio has a genuinely FREE tier — the lowest-barrier BYOK option
+  // for the community; native OpenAI last.
+  const ENABLED_SERVICES = ['openrouter', 'gemini', 'openai'];
 
   // ── Model catalog (Hard Rule #19 + protocols/model-selection.md) ──
   // For tools with a MODEL PICKER. Grouped by provider so the user can pick

@@ -1,6 +1,6 @@
 /* ============================================================
    Anúncios IA — app logic
-   BYOK (user's own key, routed via OpenRouter or native OpenAI). The tool asks the
+   BYOK (user's own key: OpenRouter, native Google Gemini, or native OpenAI). The tool asks the
    model for a strict JSON campaign, then renders it into: (a) a live feed-ad mockup
    inside a billboard frame, (b) an organized copy kit with char counters, (c) an
    exportable brief. Nothing is ever sent to our servers except the n8n gate calls.
@@ -77,6 +77,48 @@
   // ============================================================ LLM
   function fetchContent(messages, active, temperature, noReasoning, maxTokens) {
     var model = ApiKeyManager.getModel();
+
+    // ---- native Google Gemini (AI Studio) path ----
+    // Lets a member use a FREE Google AI Studio key directly (no OpenRouter credit
+    // needed). Picker Google ids ("google/gemini-3.5-flash") map to the native model
+    // name by stripping the "google/" prefix. OpenAI-style messages are converted to
+    // Gemini's contents[] + systemInstruction shape.
+    if (active.service === 'gemini') {
+      var gModel = model.indexOf('google/') === 0 ? model.slice(7) : 'gemini-3.5-flash';
+      var gUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + gModel + ':generateContent';
+      var sysText = '';
+      var contents = [];
+      messages.forEach(function (m) {
+        if (m.role === 'system') { sysText += (sysText ? '\n\n' : '') + m.content; }
+        else { contents.push({ role: (m.role === 'assistant' ? 'model' : 'user'), parts: [{ text: String(m.content) }] }); }
+      });
+      var gBody = { contents: contents, generationConfig: { temperature: temperature, maxOutputTokens: maxTokens, responseMimeType: 'application/json' } };
+      if (sysText) gBody.systemInstruction = { parts: [{ text: sysText }] };
+      return fetch(gUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': active.key },
+        body: JSON.stringify(gBody)
+      }).then(function (resp) {
+        return resp.text().then(function (txt) {
+          if (!resp.ok) {
+            var gmsg = 'Erro ' + resp.status;
+            try { var gej = JSON.parse(txt); gmsg = (gej.error && (gej.error.message || gej.error)) || gmsg; } catch (e) {}
+            var ger = new Error(typeof gmsg === 'string' ? gmsg : ('Erro ' + resp.status)); ger.status = resp.status; throw ger;
+          }
+          var gdata = {};
+          try { gdata = JSON.parse(txt); } catch (e) { throw new Error('Resposta ilegível do provedor.'); }
+          if (gdata.promptFeedback && gdata.promptFeedback.blockReason) {
+            throw new Error('O provedor bloqueou o pedido (' + gdata.promptFeedback.blockReason + '). Ajuste o texto e tente de novo.');
+          }
+          var gcand = gdata.candidates && gdata.candidates[0];
+          var gparts = gcand && gcand.content && gcand.content.parts;
+          var gcontent = gparts ? gparts.map(function (p) { return p.text || ''; }).join('') : '';
+          if (!gcontent || !String(gcontent).trim()) { var gee = new Error('Resposta vazia do modelo'); gee.emptyContent = true; throw gee; }
+          return gcontent;
+        });
+      });
+    }
+
     var isDeepSeek = model.indexOf('deepseek/') === 0;
     var url, headers, body;
 
@@ -124,6 +166,9 @@
     var model = ApiKeyManager.getModel();
     if (active.service === 'openai' && model.indexOf('openai/') !== 0) {
       return Promise.reject(new Error('O modelo selecionado exige uma chave OpenRouter. Escolha um modelo OpenAI ou cole sua chave OpenRouter em "Chaves".'));
+    }
+    if (active.service === 'gemini' && model.indexOf('google/') !== 0) {
+      return Promise.reject(new Error('O modelo selecionado exige uma chave OpenRouter. Escolha um modelo Google (Gemini) ou cole sua chave OpenRouter em "Chaves".'));
     }
     return fetchContent(messages, active, temperature, false, maxTokens).catch(function (e) {
       if (e && e.emptyContent && active.service === 'openrouter') {
